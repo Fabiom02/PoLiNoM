@@ -49,3 +49,17 @@ subplot(4,1,4);
 stem(0:tapsFIR-1, w_final, 'filled');
 xlabel('Coeff index'); ylabel('Value');
 title('Final weights (w\_final)');
+
+% MSE and SNR improvement
+mse = mean((input_signal - error).^2);
+% noise before and after
+noise_before = d - input_signal;            
+noise_after  = error - input_signal;        
+SNR_in  = 10*log10(var(input_signal) / var(noise_before));
+SNR_out = 10*log10(var(input_signal) / var(noise_after));
+SNR_improvement = SNR_out - SNR_in;
+
+fprintf('MSE between input_signal and error: %g\n', mse);
+fprintf('SNR before: %g dB\n', SNR_in);
+fprintf('SNR after: %g dB\n', SNR_out);
+fprintf('SNR improvement: %g dB\n', SNR_improvement);
