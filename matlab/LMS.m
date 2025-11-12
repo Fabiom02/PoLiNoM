@@ -1,3 +1,5 @@
+clear; close all; clc;
+
 % Parameters
 N = 2000;                 % Number of samples
 tapsFIR = 16;             % Number of FIR taps
