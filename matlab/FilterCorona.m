@@ -10,7 +10,7 @@ file = 'transmission_line_sound_100Hzharmonics.wav';
 
 N = Fs;                   % Number of samples
 tapsFIR = 16;               % Number of FIR taps
-mu = 0.01;                  % Step size
+mu = 0.001;                  % Step size
 
 % Desired Signal
 t = (0:N-1)';
@@ -19,7 +19,7 @@ input_noise = y(1:N);
 d = input_signal + input_noise;
 
 % Noise reference
-reference_noise = filter([1 0.5 0.2], 1, input_noise);
+reference_noise = filter([0 0 -0,8 0.1 0.25], 1, input_noise);
 
 % LMS FIR object
 lms = dsp.LMSFilter('Length', tapsFIR, 'StepSize', mu);
