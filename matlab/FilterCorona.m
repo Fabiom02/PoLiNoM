@@ -1,20 +1,26 @@
 clear; close all; clc;
 
+% Guitar sample for test
+
+AudioFile = 'guitar_sample.wav';
+
+[audio_sample, Fs_input] = audioread("guitar_sample.wav");
+
 % Corona effect audio
 
-file = 'transmission_line_sound_100Hzharmonics.wav';
+NoiseFile = 'transmission_line_sound_100Hzharmonics.wav';
 
-[y,Fs] = audioread(file);   % Gets the signal and the frequency sample
+[y,Fs] = audioread(NoiseFile);   % Gets the signal and the frequency sample
 
 % Parameters
 
 N = Fs;                   % Number of samples
 tapsFIR = 16;               % Number of FIR taps
-mu = 0.001;                  % Step size
+mu = 0.01;                  % Step size
 
 % Desired Signal
 t = (0:N-1)';
-input_signal = sin(2*pi*0.01*t);
+input_signal = audio_sample(1:N);
 input_noise = y(1:N);
 d = input_signal + input_noise;
 
