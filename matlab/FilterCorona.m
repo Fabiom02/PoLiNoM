@@ -5,6 +5,8 @@ clear; close all; clc;
 AudioFile = 'guitar_sample.wav';
 
 [audio_sample, Fs_input] = audioread("guitar_sample.wav");
+audio_sample = resample(audio_sample,24100,Fs_input);
+audio_sample = mean(audio_sample, 2);
 
 % Corona effect audio
 
@@ -14,24 +16,31 @@ NoiseFile = 'transmission_line_sound_100Hzharmonics.wav';
 
 % Parameters
 
-N = Fs;                   % Number of samples
+N = min(length(audio_sample), length(y));                   % Number of samples
 tapsFIR = 16;               % Number of FIR taps
-mu = 0.01;                  % Step size
+mu = 0.1;                  % Step size
 
 % Desired Signal
 t = (0:N-1)';
 input_signal = audio_sample(1:N);
 input_noise = y(1:N);
+
+%sound(input_signal, Fs);
+
 d = input_signal + input_noise;
 
+%sound(d, Fs);
+
 % Noise reference
-reference_noise = filter([0 0 -0,8 0.1 0.25], 1, input_noise);
+reference_noise = filter([-0.8 0.1 0.25], 1, input_noise);
 
 % LMS FIR object
 lms = dsp.LMSFilter('Length', tapsFIR, 'StepSize', mu);
 
 % Applying the adaptive filter
 [x_est, error, w] = lms(reference_noise, d);
+
+sound(error, Fs);
 
 % Recuperation of final weights
 w_final = w(:,end);
