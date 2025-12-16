@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "arm_math.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,7 +31,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define NUM_TAPS 16
+#define BLOCK_SIZE 128
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -43,20 +44,71 @@
 
 COM_InitTypeDef BspCOMInit;
 
-/* USER CODE BEGIN PV */
+DAC_HandleTypeDef hdac1;
+DMA_HandleTypeDef hdma_dac1_ch1;
 
+DFSDM_Filter_HandleTypeDef hdfsdm1_filter0;
+DFSDM_Filter_HandleTypeDef hdfsdm1_filter1;
+DFSDM_Channel_HandleTypeDef hdfsdm1_channel0;
+DFSDM_Channel_HandleTypeDef hdfsdm1_channel1;
+DMA_HandleTypeDef hdma_dfsdm1_flt0;
+DMA_HandleTypeDef hdma_dfsdm1_flt1;
+
+/* USER CODE BEGIN PV */
+//float32_t inData[BUFFER_SIZE];
+//float32_t outData[BUFFER_SIZE];
+//static volatile float32_t *inBufPtr;
+//static volatile float32_t *outBufPtr = &outData[0];
+
+uint8_t dataFlagReady = 0;
+
+
+
+int32_t mic1Raw[BLOCK_SIZE * 2];
+int32_t mic2Raw[BLOCK_SIZE * 2];
+float32_t mic1Buf[BLOCK_SIZE * 2];
+float32_t mic2Buf[BLOCK_SIZE * 2];
+float32_t outBuf[BLOCK_SIZE * 2];
+
+volatile uint8_t pingReady;
+volatile uint8_t pongReady;
+
+arm_lms_instance_f32 lms;
+float32_t lmsState [NUM_TAPS + BLOCK_SIZE];
+float32_t lmsCoeffs[NUM_TAPS];
+float32_t errBuf[BLOCK_SIZE];
+float32_t yBuf[BLOCK_SIZE];
+float32_t mu = 0.0005f;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
+static void MX_DFSDM1_Init(void);
+static void MX_DAC1_Init(void);
 /* USER CODE BEGIN PFP */
-
+void Audio_AppInit(void);
+static void ConvertBlockToFloat(int32_t *in, float32_t *out, uint32_t n);
+static void ProcessBlock(int32_t *mic1RawPtr,int32_t *mic2RawPtr,float32_t *outPtr,uint32_t  blockSize);
+void Audio_ProcessLoop(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void HAL_DFSDM_FilterRegConvHalfCpltCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_filter)
+{
+    if (hdfsdm_filter == &hdfsdm1_filter0) {
+        pingReady = 1;
+    }
+}
 
+void HAL_DFSDM_FilterRegConvCpltCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_filter)
+{
+    if (hdfsdm_filter == &hdfsdm1_filter0) {
+        pongReady = 1;
+    }
+}
 /* USER CODE END 0 */
 
 /**
@@ -88,8 +140,13 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
+  MX_DFSDM1_Init();
+  MX_DAC1_Init();
   /* USER CODE BEGIN 2 */
+  Audio_AppInit();      // sua função (buffers + LMS + start DMA)
 
+  Audio_ProcessLoop();  // laço principal
   /* USER CODE END 2 */
 
   /* Initialize leds */
@@ -174,6 +231,156 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief DAC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_DAC1_Init(void)
+{
+
+  /* USER CODE BEGIN DAC1_Init 0 */
+
+  /* USER CODE END DAC1_Init 0 */
+
+  DAC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN DAC1_Init 1 */
+
+  /* USER CODE END DAC1_Init 1 */
+
+  /** DAC Initialization
+  */
+  hdac1.Instance = DAC1;
+  if (HAL_DAC_Init(&hdac1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** DAC channel OUT1 config
+  */
+  sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
+  sConfig.DAC_Trigger = DAC_TRIGGER_NONE;
+  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
+  sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_DISABLE;
+  sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
+  if (HAL_DAC_ConfigChannel(&hdac1, &sConfig, DAC_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN DAC1_Init 2 */
+
+  /* USER CODE END DAC1_Init 2 */
+
+}
+
+/**
+  * @brief DFSDM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_DFSDM1_Init(void)
+{
+
+  /* USER CODE BEGIN DFSDM1_Init 0 */
+
+  /* USER CODE END DFSDM1_Init 0 */
+
+  /* USER CODE BEGIN DFSDM1_Init 1 */
+
+  /* USER CODE END DFSDM1_Init 1 */
+  hdfsdm1_filter0.Instance = DFSDM1_Filter0;
+  hdfsdm1_filter0.Init.RegularParam.Trigger = DFSDM_FILTER_SW_TRIGGER;
+  hdfsdm1_filter0.Init.RegularParam.FastMode = DISABLE;
+  hdfsdm1_filter0.Init.RegularParam.DmaMode = ENABLE;
+  hdfsdm1_filter0.Init.FilterParam.SincOrder = DFSDM_FILTER_FASTSINC_ORDER;
+  hdfsdm1_filter0.Init.FilterParam.Oversampling = 1;
+  hdfsdm1_filter0.Init.FilterParam.IntOversampling = 1;
+  if (HAL_DFSDM_FilterInit(&hdfsdm1_filter0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  hdfsdm1_filter1.Instance = DFSDM1_Filter1;
+  hdfsdm1_filter1.Init.RegularParam.Trigger = DFSDM_FILTER_SW_TRIGGER;
+  hdfsdm1_filter1.Init.RegularParam.FastMode = DISABLE;
+  hdfsdm1_filter1.Init.RegularParam.DmaMode = ENABLE;
+  hdfsdm1_filter1.Init.FilterParam.SincOrder = DFSDM_FILTER_FASTSINC_ORDER;
+  hdfsdm1_filter1.Init.FilterParam.Oversampling = 1;
+  hdfsdm1_filter1.Init.FilterParam.IntOversampling = 1;
+  if (HAL_DFSDM_FilterInit(&hdfsdm1_filter1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  hdfsdm1_channel0.Instance = DFSDM1_Channel0;
+  hdfsdm1_channel0.Init.OutputClock.Activation = ENABLE;
+  hdfsdm1_channel0.Init.OutputClock.Selection = DFSDM_CHANNEL_OUTPUT_CLOCK_SYSTEM;
+  hdfsdm1_channel0.Init.OutputClock.Divider = 2;
+  hdfsdm1_channel0.Init.Input.Multiplexer = DFSDM_CHANNEL_EXTERNAL_INPUTS;
+  hdfsdm1_channel0.Init.Input.DataPacking = DFSDM_CHANNEL_STANDARD_MODE;
+  hdfsdm1_channel0.Init.Input.Pins = DFSDM_CHANNEL_SAME_CHANNEL_PINS;
+  hdfsdm1_channel0.Init.SerialInterface.Type = DFSDM_CHANNEL_SPI_RISING;
+  hdfsdm1_channel0.Init.SerialInterface.SpiClock = DFSDM_CHANNEL_SPI_CLOCK_INTERNAL;
+  hdfsdm1_channel0.Init.Awd.FilterOrder = DFSDM_CHANNEL_FASTSINC_ORDER;
+  hdfsdm1_channel0.Init.Awd.Oversampling = 1;
+  hdfsdm1_channel0.Init.Offset = 0;
+  hdfsdm1_channel0.Init.RightBitShift = 0x00;
+  if (HAL_DFSDM_ChannelInit(&hdfsdm1_channel0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  hdfsdm1_channel1.Instance = DFSDM1_Channel1;
+  hdfsdm1_channel1.Init.OutputClock.Activation = ENABLE;
+  hdfsdm1_channel1.Init.OutputClock.Selection = DFSDM_CHANNEL_OUTPUT_CLOCK_SYSTEM;
+  hdfsdm1_channel1.Init.OutputClock.Divider = 2;
+  hdfsdm1_channel1.Init.Input.Multiplexer = DFSDM_CHANNEL_EXTERNAL_INPUTS;
+  hdfsdm1_channel1.Init.Input.DataPacking = DFSDM_CHANNEL_STANDARD_MODE;
+  hdfsdm1_channel1.Init.Input.Pins = DFSDM_CHANNEL_FOLLOWING_CHANNEL_PINS;
+  hdfsdm1_channel1.Init.SerialInterface.Type = DFSDM_CHANNEL_SPI_RISING;
+  hdfsdm1_channel1.Init.SerialInterface.SpiClock = DFSDM_CHANNEL_SPI_CLOCK_INTERNAL;
+  hdfsdm1_channel1.Init.Awd.FilterOrder = DFSDM_CHANNEL_FASTSINC_ORDER;
+  hdfsdm1_channel1.Init.Awd.Oversampling = 1;
+  hdfsdm1_channel1.Init.Offset = 0;
+  hdfsdm1_channel1.Init.RightBitShift = 0x00;
+  if (HAL_DFSDM_ChannelInit(&hdfsdm1_channel1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_DFSDM_FilterConfigRegChannel(&hdfsdm1_filter0, DFSDM_CHANNEL_0, DFSDM_CONTINUOUS_CONV_ON) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_DFSDM_FilterConfigRegChannel(&hdfsdm1_filter1, DFSDM_CHANNEL_1, DFSDM_CONTINUOUS_CONV_ON) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN DFSDM1_Init 2 */
+
+  /* USER CODE END DFSDM1_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Stream0_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
+  /* DMA1_Stream1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream1_IRQn);
+  /* DMA1_Stream2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream2_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -187,6 +394,7 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -194,7 +402,98 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void Audio_AppInit(void)
+{
+    for (int i = 0; i < NUM_TAPS; i++) {
+        lmsCoeffs[i] = 0.0f;
+    }
 
+    arm_lms_init_f32(&lms,
+                     NUM_TAPS,
+                     lmsCoeffs,
+                     lmsState,
+                     mu,
+                     BLOCK_SIZE);           // [web:73]
+
+    // Inicia DFSDM + DMA em modo circular (CubeMX já configurou o modo)
+    HAL_DFSDM_FilterRegularStart_DMA(&hdfsdm1_filter0,
+                                     (int32_t*)mic1Raw,
+                                     BLOCK_SIZE * 2);
+
+    HAL_DFSDM_FilterRegularStart_DMA(&hdfsdm1_filter1,
+                                     (int32_t*)mic2Raw,
+                                     BLOCK_SIZE * 2);
+
+    // Inicia DAC em DMA circular usando outBuf
+    HAL_DAC_Start_DMA(&hdac1,
+                      DAC_CHANNEL_1,
+                      (uint32_t*)outBuf,
+                      BLOCK_SIZE * 2,
+                      DAC_ALIGN_12B_R);
+}
+
+static void ConvertBlockToFloat(int32_t *in, float32_t *out, uint32_t n)
+{
+    // Normalização simples: 24 bits -> [-1, 1]
+    for (uint32_t i = 0; i < n; i++) {
+        out[i] = (float32_t)in[i] / 8388608.0f;   // 2^23 [web:69]
+    }
+}
+
+static void ProcessBlock(int32_t *mic1RawPtr,
+                         int32_t *mic2RawPtr,
+                         float32_t *outPtr,
+                         uint32_t  blockSize)
+{
+    // Converte int32 DFSDM -> float32
+    ConvertBlockToFloat(mic1RawPtr, mic1Buf, blockSize);
+    ConvertBlockToFloat(mic2RawPtr, mic2Buf, blockSize);
+
+    // LMS: x = mic2 (referência), d = mic1 (sinal+ruído) [web:73][web:60]
+    arm_lms_f32(&lms,
+                mic2Buf,
+                mic1Buf,
+                yBuf,
+                errBuf,
+                blockSize);
+
+    // Mapeia erro para o DAC (exemplo 12 bits)
+    for (uint32_t i = 0; i < blockSize; i++) {
+        float32_t s = errBuf[i];
+
+        if (s > 1.0f)  s = 1.0f;
+        if (s < -1.0f) s = -1.0f;
+
+        uint16_t dac = (uint16_t)((s * 0.5f + 0.5f) * 4095.0f);
+        outPtr[i] = (float32_t)dac;
+    }
+}
+
+void Audio_ProcessLoop(void)
+{
+    while (1)
+    {
+        if (pingReady) {
+            pingReady = 0;
+
+            ProcessBlock(&mic1Raw[0],
+                         &mic2Raw[0],
+                         &outBuf[0],
+                         BLOCK_SIZE);
+        }
+
+        if (pongReady) {
+            pongReady = 0;
+
+            ProcessBlock(&mic1Raw[BLOCK_SIZE],
+                         &mic2Raw[BLOCK_SIZE],
+                         &outBuf[BLOCK_SIZE],
+                         BLOCK_SIZE);
+        }
+
+        // outras tarefas...
+    }
+}
 /* USER CODE END 4 */
 
 /**
