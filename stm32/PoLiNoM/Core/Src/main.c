@@ -33,6 +33,7 @@
 /* USER CODE BEGIN PD */
 #define NUM_TAPS 16
 #define BLOCK_SIZE 128
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -55,14 +56,6 @@ DMA_HandleTypeDef hdma_dfsdm1_flt0;
 DMA_HandleTypeDef hdma_dfsdm1_flt1;
 
 /* USER CODE BEGIN PV */
-//float32_t inData[BUFFER_SIZE];
-//float32_t outData[BUFFER_SIZE];
-//static volatile float32_t *inBufPtr;
-//static volatile float32_t *outBufPtr = &outData[0];
-
-uint8_t dataFlagReady = 0;
-
-
 
 int32_t mic1Raw[BLOCK_SIZE * 2];
 int32_t mic2Raw[BLOCK_SIZE * 2];
@@ -92,20 +85,36 @@ void Audio_AppInit(void);
 static void ConvertBlockToFloat(int32_t *in, float32_t *out, uint32_t n);
 static void ProcessBlock(int32_t *mic1RawPtr,int32_t *mic2RawPtr,float32_t *outPtr,uint32_t  blockSize);
 void Audio_ProcessLoop(void);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+/**
+  * @brief DFSDM Half conversion interruption
+  * @param Filter of the DFSDM
+  * @retval None
+  */
 void HAL_DFSDM_FilterRegConvHalfCpltCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_filter)
 {
     if (hdfsdm_filter == &hdfsdm1_filter0) {
+
+    	// Active the flag to process the first half of data
         pingReady = 1;
     }
 }
 
+/**
+  * @brief DFSDM Full conversion interruption
+  * @param Filter of the DFSDM
+  * @retval None
+  */
 void HAL_DFSDM_FilterRegConvCpltCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_filter)
 {
     if (hdfsdm_filter == &hdfsdm1_filter0) {
+
+    	// Active the flag to process the second half of data
         pongReady = 1;
     }
 }
@@ -144,9 +153,10 @@ int main(void)
   MX_DFSDM1_Init();
   MX_DAC1_Init();
   /* USER CODE BEGIN 2 */
-  Audio_AppInit();      // sua função (buffers + LMS + start DMA)
+ // Audio_AppInit();      // sua função (buffers + LMS + start DMA)
 
-  Audio_ProcessLoop();  // laço principal
+ // Audio_ProcessLoop();  // laço principal
+
   /* USER CODE END 2 */
 
   /* Initialize leds */
@@ -172,7 +182,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -402,20 +411,29 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+/**
+  * @brief Initializes the LMS filter, the DFSDM filters with DMA and the DAC with DMA
+  * @param Filter of the DFSDM
+  * @retval None
+  */
 void Audio_AppInit(void)
 {
-    for (int i = 0; i < NUM_TAPS; i++) {
+
+	// FIlls the coefficient buffer with zeros
+	for (int i = 0; i < NUM_TAPS; i++) {
         lmsCoeffs[i] = 0.0f;
     }
 
+	// CMSIS-DSP LMS filter initialization function for float32_t
     arm_lms_init_f32(&lms,
                      NUM_TAPS,
                      lmsCoeffs,
                      lmsState,
                      mu,
-                     BLOCK_SIZE);           // [web:73]
+                     BLOCK_SIZE);
 
-    // Inicia DFSDM + DMA em modo circular (CubeMX já configurou o modo)
+    // Initialization of DFSDM+DMA with circular buffer (configured in the CubeMX)
     HAL_DFSDM_FilterRegularStart_DMA(&hdfsdm1_filter0,
                                      (int32_t*)mic1Raw,
                                      BLOCK_SIZE * 2);
@@ -424,7 +442,7 @@ void Audio_AppInit(void)
                                      (int32_t*)mic2Raw,
                                      BLOCK_SIZE * 2);
 
-    // Inicia DAC em DMA circular usando outBuf
+    // Initialization of the DAC+DMA using the outBuf
     HAL_DAC_Start_DMA(&hdac1,
                       DAC_CHANNEL_1,
                       (uint32_t*)outBuf,
@@ -432,6 +450,13 @@ void Audio_AppInit(void)
                       DAC_ALIGN_12B_R);
 }
 
+/**
+  * @brief Converts a int32-t block into a float32-t block
+  * @param in: pointed int32_t block to be converted
+  * @param out: pointed float32_t block to pass the converted data
+  * @param n: size of the block
+  * @retval None
+  */
 static void ConvertBlockToFloat(int32_t *in, float32_t *out, uint32_t n)
 {
     // Normalização simples: 24 bits -> [-1, 1]
@@ -440,16 +465,24 @@ static void ConvertBlockToFloat(int32_t *in, float32_t *out, uint32_t n)
     }
 }
 
+/**
+  * @brief Process the data from the microphones with the LMS filter
+  * @param mic1RawPtr: pointer to the data in the input microphone
+  * @param mic1RawPtr: pointer to the data in the reference microphone
+  * @param outPtr: pointer to the output buffer
+  * @param blockSize: block size
+  * @retval None
+  */
 static void ProcessBlock(int32_t *mic1RawPtr,
                          int32_t *mic2RawPtr,
                          float32_t *outPtr,
                          uint32_t  blockSize)
 {
-    // Converte int32 DFSDM -> float32
+    // Converts int32 DFSDM -> float32
     ConvertBlockToFloat(mic1RawPtr, mic1Buf, blockSize);
     ConvertBlockToFloat(mic2RawPtr, mic2Buf, blockSize);
 
-    // LMS: x = mic2 (referência), d = mic1 (sinal+ruído) [web:73][web:60]
+    // LMS: x = mic2 (reference), d = mic1 (signal+noise)
     arm_lms_f32(&lms,
                 mic2Buf,
                 mic1Buf,
@@ -457,7 +490,7 @@ static void ProcessBlock(int32_t *mic1RawPtr,
                 errBuf,
                 blockSize);
 
-    // Mapeia erro para o DAC (exemplo 12 bits)
+    // Maps the error to the DAC
     for (uint32_t i = 0; i < blockSize; i++) {
         float32_t s = errBuf[i];
 
@@ -469,6 +502,10 @@ static void ProcessBlock(int32_t *mic1RawPtr,
     }
 }
 
+/**
+  * @brief Loop to call the processing functions when the flags are active
+  * @retval None
+  */
 void Audio_ProcessLoop(void)
 {
     while (1)
@@ -491,9 +528,9 @@ void Audio_ProcessLoop(void)
                          BLOCK_SIZE);
         }
 
-        // outras tarefas...
     }
 }
+
 /* USER CODE END 4 */
 
 /**
