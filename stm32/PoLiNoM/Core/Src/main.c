@@ -31,8 +31,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define NUM_TAPS 16
-#define BLOCK_SIZE 128
+
+#define NUM_TAPS 16 	// Filter size
+#define BLOCK_SIZE 128 	// Size of the block to do the data treatment
 
 /* USER CODE END PD */
 
@@ -57,21 +58,21 @@ DMA_HandleTypeDef hdma_dfsdm1_flt1;
 
 /* USER CODE BEGIN PV */
 
-int32_t mic1Raw[BLOCK_SIZE * 2];
-int32_t mic2Raw[BLOCK_SIZE * 2];
-float32_t mic1Buf[BLOCK_SIZE * 2];
-float32_t mic2Buf[BLOCK_SIZE * 2];
-float32_t outBuf[BLOCK_SIZE * 2];
+int32_t mic1Raw[BLOCK_SIZE * 2];	// Input microphone raw data buffer
+int32_t mic2Raw[BLOCK_SIZE * 2];	// Reference microphone raw data buffer
+float32_t mic1Buf[BLOCK_SIZE * 2];	// Input microphone converted data buffer
+float32_t mic2Buf[BLOCK_SIZE * 2];	// Reference microphone converted data buffer
+float32_t outBuf[BLOCK_SIZE * 2];	// Output buffer
 
-volatile uint8_t pingReady;
-volatile uint8_t pongReady;
+volatile uint8_t pingReady;	// Flag for the first half process treatment
+volatile uint8_t pongReady;	// Flag for the second half process treatment
 
-arm_lms_instance_f32 lms;
-float32_t lmsState [NUM_TAPS + BLOCK_SIZE];
-float32_t lmsCoeffs[NUM_TAPS];
-float32_t errBuf[BLOCK_SIZE];
-float32_t yBuf[BLOCK_SIZE];
-float32_t mu = 0.0005f;
+arm_lms_instance_f32 lms;					// LMS instance
+float32_t lmsState [NUM_TAPS + BLOCK_SIZE];	// LMS state buffer
+float32_t lmsCoeffs[NUM_TAPS];				// LMS coefficients buffer
+float32_t errBuf[BLOCK_SIZE];				// LMS error output buffer
+float32_t yBuf[BLOCK_SIZE];					// LMS signal output buffer
+float32_t mu = 0.0005f;						// Filter step
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -100,7 +101,7 @@ void HAL_DFSDM_FilterRegConvHalfCpltCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_
 {
     if (hdfsdm_filter == &hdfsdm1_filter0) {
 
-    	// Active the flag to process the first half of data
+    	// Activate the flag to process the first half of data
         pingReady = 1;
     }
 }
@@ -114,7 +115,7 @@ void HAL_DFSDM_FilterRegConvCpltCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_filt
 {
     if (hdfsdm_filter == &hdfsdm1_filter0) {
 
-    	// Active the flag to process the second half of data
+    	// Activate the flag to process the second half of data
         pongReady = 1;
     }
 }
@@ -153,9 +154,9 @@ int main(void)
   MX_DFSDM1_Init();
   MX_DAC1_Init();
   /* USER CODE BEGIN 2 */
- // Audio_AppInit();      // sua função (buffers + LMS + start DMA)
+  Audio_AppInit();      // Initialization function
 
- // Audio_ProcessLoop();  // laço principal
+  Audio_ProcessLoop();  // Main loop
 
   /* USER CODE END 2 */
 
@@ -459,9 +460,9 @@ void Audio_AppInit(void)
   */
 static void ConvertBlockToFloat(int32_t *in, float32_t *out, uint32_t n)
 {
-    // Normalização simples: 24 bits -> [-1, 1]
+    // 24 bits -> [-1, 1]
     for (uint32_t i = 0; i < n; i++) {
-        out[i] = (float32_t)in[i] / 8388608.0f;   // 2^23 [web:69]
+        out[i] = (float32_t)in[i] / 8388608.0f;   // 2^23
     }
 }
 
