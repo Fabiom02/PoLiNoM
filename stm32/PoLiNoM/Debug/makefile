@@ -12,7 +12,6 @@ RM := rm -rf
 -include Drivers/STM32H7xx_HAL_Driver/Src/subdir.mk
 -include Drivers/CMSIS_DSP/Source/SupportFunctions/subdir.mk
 -include Drivers/CMSIS_DSP/Source/FilteringFunctions/subdir.mk
--include Drivers/BSP/STM32H7xx_Nucleo/subdir.mk
 -include Core/Startup/subdir.mk
 -include Core/Src/subdir.mk
 -include objects.mk
@@ -64,7 +63,7 @@ main-build: PoLiNoM.elf secondary-outputs
 
 # Tool invocations
 PoLiNoM.elf PoLiNoM.map: $(OBJS) $(USER_OBJS) C:\FabioAugusto\ESISAR\5A\PX505\PoLiNoM\stm32\PoLiNoM\STM32H753ZITX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "PoLiNoM.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m7 -T"C:\FabioAugusto\ESISAR\5A\PX505\PoLiNoM\stm32\PoLiNoM\STM32H753ZITX_FLASH.ld" --specs=nosys.specs -Wl,-Map="PoLiNoM.map" -Wl,--gc-sections -static -Wl,--print-memory-usage --specs=nano.specs -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+	arm-none-eabi-gcc -o "PoLiNoM.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m7 -T"C:\FabioAugusto\ESISAR\5A\PX505\PoLiNoM\stm32\PoLiNoM\STM32H753ZITX_FLASH.ld" --specs=nosys.specs -Wl,-Map="PoLiNoM.map" -Wl,--gc-sections -static -Wl,--print-memory-usage --specs=nano.specs -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -u _printf_float -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

@@ -24,7 +24,6 @@ C_DEPS :=
 SUBDIRS := \
 Core/Src \
 Core/Startup \
-Drivers/BSP/STM32H7xx_Nucleo \
 Drivers/CMSIS_DSP/Source/FilteringFunctions \
 Drivers/CMSIS_DSP/Source/SupportFunctions \
 Drivers/STM32H7xx_HAL_Driver/Src \

@@ -2,6 +2,8 @@
 ../Core/Src/stm32h7xx_hal_msp.c:90:6:HAL_DAC_MspInit	3
 ../Core/Src/stm32h7xx_hal_msp.c:143:6:HAL_DAC_MspDeInit	2
 ../Core/Src/stm32h7xx_hal_msp.c:176:6:HAL_DFSDM_FilterMspInit	8
-../Core/Src/stm32h7xx_hal_msp.c:283:6:HAL_DFSDM_ChannelMspInit	4
-../Core/Src/stm32h7xx_hal_msp.c:343:6:HAL_DFSDM_FilterMspDeInit	2
-../Core/Src/stm32h7xx_hal_msp.c:377:6:HAL_DFSDM_ChannelMspDeInit	2
+../Core/Src/stm32h7xx_hal_msp.c:300:6:HAL_DFSDM_ChannelMspInit	4
+../Core/Src/stm32h7xx_hal_msp.c:377:6:HAL_DFSDM_FilterMspDeInit	2
+../Core/Src/stm32h7xx_hal_msp.c:413:6:HAL_DFSDM_ChannelMspDeInit	2
+../Core/Src/stm32h7xx_hal_msp.c:446:6:HAL_TIM_Base_MspInit	2
+../Core/Src/stm32h7xx_hal_msp.c:469:6:HAL_TIM_Base_MspDeInit	2
