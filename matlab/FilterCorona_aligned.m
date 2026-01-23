@@ -1,7 +1,7 @@
 clear; close all; clc;
 
 % --- User options ---
-useNormalized = false;   % true -> use Normalized LMS
+useNormalized = true;   % true -> use Normalized LMS
 autoAlign = true;       % estimate delay via xcorr and align (offline)
 tapsFIR = 16;           % adaptive filter length
 mu_norm = 0.1;          % StepSize for Normalized LMS (typical 0.1-1.0).
@@ -19,6 +19,10 @@ audio_sample = mean(audio_sample,2);
 
 Fs = Fs_noise;
 
+player = audioplayer(audio_sample, Fs);
+play(player);
+waitfor(player, 'Running', 'off');
+
 % trim to same length for simple demo
 N = min(length(audio_sample), length(noise_sig));
 input_signal = audio_sample(1:N);
@@ -27,7 +31,9 @@ input_noise  = noise_sig(1:N);
 % desired (primary) = wanted signal + noise
 d = input_signal + input_noise;
 
-%soundsc(d, Fs);
+player = audioplayer(d, Fs);
+play(player);
+waitfor(player, 'Running', 'off');
 
 % create a realistic reference with extra delay/taps in front
 % e.g. filter with two leading zeros to introduce delay
@@ -87,10 +93,12 @@ end
 w_final = w(:,end);
 
 % play cleaned output
-soundsc(error_out, Fs);
+player = audioplayer(error_out, Fs);
+play(player);
+waitfor(player, 'Running', 'off');
 
 % --- Plots ---
-figure('Name','Results Normalized LMS','NumberTitle','off');
+figure('Name','Results','NumberTitle','off');
 subplot(4,1,1);
 plot(t, d_al); title('Signal with noise (d)'); xlabel('Samples');
 subplot(4,1,2);
